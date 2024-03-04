@@ -2,6 +2,7 @@ data/
 storage/
 debug_traces/
 api_key*
+.DS_Store
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
