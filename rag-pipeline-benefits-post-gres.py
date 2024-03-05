@@ -22,7 +22,7 @@ from llama_index.vector_stores.postgres import PGVectorStore
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
-DOCUMENT_PATH = "./data/Benefits/BYOD/"
+DOCUMENT_PATH = "./data/Benefits/Test/"
 STORAGE_PATH = "./storage/benefit_pipeline_storage_pg"
 DB_NAME = "benefit_vector_db"
 DB_USER = "benefit_vector_user"
@@ -63,18 +63,22 @@ def load_documents():
     vector_store = create_vector_store()
     pipeline = IngestionPipeline(
         transformations=[
-            SentenceSplitter(chunk_size=25, chunk_overlap=0),
+            SentenceSplitter(),
             TitleExtractor(),
             OpenAIEmbedding(),
         ],
         docstore=SimpleDocumentStore(),
         vector_store=vector_store,
     )
-
-    documents = SimpleDirectoryReader(DOCUMENT_PATH).load_data()
+    print(len(pipeline.docstore.docs))
+    if os.path.exists(STORAGE_PATH):
+        pipeline.load(persist_dir=STORAGE_PATH)
+    print(len(pipeline.docstore.docs))
+    documents = SimpleDirectoryReader(DOCUMENT_PATH, filename_as_id=True).load_data()
     # transform docs using pipeline
     transformed_nodes = pipeline.run(documents=documents)
     pipeline.persist(STORAGE_PATH)
+    print(len(pipeline.docstore.docs))
     return vector_store
 
 
@@ -114,9 +118,36 @@ def query():
     print(response)
 
 
+# load new documents
+def load_new_documents():
+    print("Loading new documents...")
+    vector_store = create_vector_store()
+    new_pipeline = IngestionPipeline(
+        transformations=[
+            SentenceSplitter(chunk_size=25, chunk_overlap=0),
+            TitleExtractor(),
+            OpenAIEmbedding(),
+        ],
+        docstore=SimpleDocumentStore(),
+        vector_store=vector_store,
+    )
+    new_pipeline.load(persist_dir=STORAGE_PATH)
+    # will run instantly due to the cache
+    nodes = new_pipeline.run(documents=[Document.example()])
+    print(nodes)
+    print(len(nodes))
+    print(nodes[0].text)
+    print(nodes[0].embedding)
+    print(len(new_pipeline.docstore.docs))
+
+
+# load_new_documents()
+
 # create_db()
 
-query()
+# query()
+
+load_documents()
 
 # load the data
 # pipeline.load(persist_dir=STORAGE_PATH)
