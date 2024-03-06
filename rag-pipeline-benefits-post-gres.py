@@ -2,6 +2,8 @@ import os
 import logging
 import sys
 import psycopg2
+import colorama
+from colorama import Fore, Style
 from sqlalchemy import make_url
 from llama_index.core import (
     VectorStoreIndex,
@@ -21,8 +23,9 @@ from llama_index.vector_stores.postgres import PGVectorStore
 # logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
+colorama.init(autoreset=True)
 
-DOCUMENT_PATH = "./data/Benefits/Test/"
+DOCUMENT_PATH = "./data/Benefits/BYOD"
 STORAGE_PATH = "./storage/benefit_pipeline_storage_pg"
 DB_NAME = "benefit_vector_db"
 DB_USER = "benefit_vector_user"
@@ -42,10 +45,8 @@ def create_db():
         c.execute(f"CREATE DATABASE {DB_NAME} owner {DB_USER}")
 
 
-url = make_url(CONNECTION_STRING)
-
-
 def create_vector_store():
+    url = make_url(CONNECTION_STRING)
     vector_store = PGVectorStore.from_params(
         database=DB_NAME,
         host=url.host,
@@ -70,30 +71,29 @@ def load_documents():
         docstore=SimpleDocumentStore(),
         vector_store=vector_store,
     )
-    print(len(pipeline.docstore.docs))
     if os.path.exists(STORAGE_PATH):
         pipeline.load(persist_dir=STORAGE_PATH)
+
     print(len(pipeline.docstore.docs))
-    documents = SimpleDirectoryReader(DOCUMENT_PATH, filename_as_id=True).load_data()
+    documents = SimpleDirectoryReader(
+        DOCUMENT_PATH, recursive=True, filename_as_id=True
+    ).load_data()
+
     # transform docs using pipeline
-    transformed_nodes = pipeline.run(documents=documents)
+    transformed_nodes = pipeline.run(documents=documents, show_progress=True)
+
+    # save the cache and docstore index
     pipeline.persist(STORAGE_PATH)
+
     print(len(pipeline.docstore.docs))
     return vector_store
 
 
 def build_index(vector_store):
     print("Building index...")
-    index = VectorStoreIndex.from_vector_store(vector_store)
+    index = VectorStoreIndex.from_vector_store(vector_store, show_progress=True)
     index.storage_context.persist(STORAGE_PATH)
     return index
-    # storage_context = StorageContext.from_defaults(vector_store=vector_store)
-    # index = VectorStoreIndex.from_documents(
-    #     documents, storage_context=storage_context, show_progress=True
-    # )
-    # index = VectorStoreIndex(
-    #     nodes=nodes, storage_context=storage_context, show_progress=True
-    # )
 
 
 def load_index():
@@ -106,55 +106,38 @@ def load_index():
     return index
 
 
-def query():
+def get_doc_index():
     if not os.path.exists(STORAGE_PATH):
         vector_store = load_documents()
         index = build_index(vector_store)
     else:
         index = load_index()
 
+    return index
+
+
+def main():
+    index = get_doc_index()
     query_engine = index.as_query_engine()
-    response = query_engine.query("how much is benefit?")
-    print(response)
+
+    try:
+        while True:
+            user_input = input(Fore.GREEN + "\nEnter your query (press 'q' to quit): ")
+            if user_input.lower() == "q":
+                print(Fore.GREEN + "\nbye!")
+                break
+            elif not user_input.strip():
+                print(Fore.RED + "Please enter a valid query.")
+                continue
+            query_response = query_engine.query(user_input)
+            print(Fore.YELLOW + Style.BRIGHT + "Response:", end=" ")
+            print(Fore.YELLOW + str(query_response) + Style.RESET_ALL)
+    except KeyboardInterrupt:
+        print(Fore.RED + "\nExiting...")
 
 
-# load new documents
-def load_new_documents():
-    print("Loading new documents...")
-    vector_store = create_vector_store()
-    new_pipeline = IngestionPipeline(
-        transformations=[
-            SentenceSplitter(chunk_size=25, chunk_overlap=0),
-            TitleExtractor(),
-            OpenAIEmbedding(),
-        ],
-        docstore=SimpleDocumentStore(),
-        vector_store=vector_store,
-    )
-    new_pipeline.load(persist_dir=STORAGE_PATH)
-    # will run instantly due to the cache
-    nodes = new_pipeline.run(documents=[Document.example()])
-    print(nodes)
-    print(len(nodes))
-    print(nodes[0].text)
-    print(nodes[0].embedding)
-    print(len(new_pipeline.docstore.docs))
+if __name__ == "__main__":
+    main()
 
-
-# load_new_documents()
-
-# create_db()
-
-# query()
-
-load_documents()
-
-# load the data
-# pipeline.load(persist_dir=STORAGE_PATH)
-# nodes = pipeline.run()
-
-# index = VectorStoreIndex.from_documents(pipeline.run())
-# index = VectorStoreIndex.from_vector_store(
-#     vector_store=vector_store,
-#     embed_model=embed_model,
-# )
+# create_db()  # only run once
+# load_documents()  # run to add/update documents
