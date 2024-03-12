@@ -25,7 +25,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 colorama.init(autoreset=True)
 
-DOCUMENT_PATH = "./data/Benefits/BYOD"
+DOCUMENT_PATH = "./data/Benefits/"
 STORAGE_PATH = "./storage/benefit_pipeline_storage_pg"
 DB_NAME = "benefit_vector_db"
 DB_USER = "benefit_vector_user"
@@ -79,8 +79,12 @@ def load_documents():
         DOCUMENT_PATH, recursive=True, filename_as_id=True
     ).load_data()
 
-    # transform docs using pipeline
-    transformed_nodes = pipeline.run(documents=documents, show_progress=True)
+    print(len(documents))
+    # iterate over list of documents
+    for doc in documents:
+        # transform docs using pipeline
+        print(f"Processing document: {doc.metadata['file_path']}")
+        transformed_nodes = pipeline.run(documents=[doc], show_progress=True)
 
     # save the cache and docstore index
     pipeline.persist(STORAGE_PATH)
